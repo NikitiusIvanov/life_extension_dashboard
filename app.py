@@ -131,12 +131,12 @@ gbd_country_id_to_centroid_map = {
 # set additional colors
 color_mapping = {
     'Default life expectancy': {
-        'Male': 'rgba(89, 52, 235, 0.5)',
-        'Female': 'rgba(235, 52, 155, 0.5)'
+        'Male': 'rgba(89, 52, 235, 0.6)',
+        'Female': 'rgba(235, 52, 155, 0.6)'
     },
     'Estimated life extension': {
-        'Male': 'rgba(89, 52, 235, 0.9)',
-        'Female': 'rgba(235, 52, 155, 0.9)'
+        'Male': 'rgba(10, 38, 247, 0.9)',
+        'Female': 'rgba(255, 15, 150, 0.9)'
     }
 }
 
@@ -159,6 +159,7 @@ def prepare_data(
 
     ################################################
     # get risk names from parents
+    risk_factors_names_source = risks_names_manageable.copy()
     risk_factors_names = np.concatenate([
         risks_parents_names_manageable[x]
         if x in risks_parents_names_manageable.keys()
@@ -403,30 +404,29 @@ def prepare_data(
     }
 
     life_expectancy_extension_by_country_suptitle = (
-        f' ###### Distribution of extension of estimated life expectancy'
-        f' with excluding {len(risk_factors_names)} risk factors'
+        f' ###### Еxtension of life expectancy'
         f' by {len(gbd_id_to_iso_code_map.keys())} countries,'
-        f' for **{sex_name}** aged **{age}** y.o.'
+        f' with excluding {len(risk_factors_names_source)} manageable risk factors'
+        f' for {sex_name} aged {age} y.o.'
     )
 
     life_expectancy_extension_by_risk_suptitle = (
-        f' ###### Distribution of **{life_expectancy_extension[sex_name]}** years'
-        f' extension of estimated life expectancy,'
-        f' by **{len(risk_factors_names)}** risk factors,'
-        f' for **{sex_name}**,'
-        f' aged **{age}** y.o.,'
-        f' in **{location_name}**'        
+        f' ###### Еxtension of life expectancy,'
+        f' by excluded {len(risk_factors_names_source)} manageable risk factors,'
+        f' for {sex_name},'
+        f' aged {age} y.o.,'
+        f' in {location_name}'        
     )
 
     life_expectancy_extension_by_sex_suptitle = (
-        f' ###### Distribution of extension of estimated life expectancy by sex'
-        f' for age **{age}** y.o.,'
-        f' in **{location_name}**'        
+        f' ###### Extension of life expectancy by sex'
+        f' for age {age} y.o.,'
+        f' in {location_name}'        
     )
 
     life_expectancy_extension_by_age_suptitle = (
-        f' ###### Distribution of extension of estimated life expectancy by age,'
-        f' for **{sex_name}** in location:**{location_name}**'
+        f' ###### Extension of estimated life expectancy by age,'
+        f' for {sex_name} in {location_name}'
     )
 
     return (
@@ -459,7 +459,7 @@ def life_expectancy_extension_by_country_plotter(
         color="Years",
         hover_name="location_name",
         title = "",
-        color_continuous_scale=px.colors.sequential.YlGnBu
+        color_continuous_scale=px.colors.sequential.dense
     )
 
     fig.update_layout(
@@ -495,10 +495,10 @@ def life_expectancy_extension_by_country_plotter(
                 size=7,
                 color='white'
             ),
-            text=[f'<b>{location_name}<br>{total_extension} years</b>'],
+            text=[f'<b>{total_extension}<br>years</b>'],
             textfont=dict(
-                color='white',
-                size=11.02,
+                color='black',
+                size=15.02,
             ),
             textposition='top center',
             hoverinfo='skip',
@@ -524,12 +524,12 @@ def life_expectancy_extension_by_country_plotter(
             mode='markers+text',
             marker=dict(
                 size=6,
-                color='rgba(250, 46, 35, 1)'
+                color='rgb(250, 46, 35)'
             ),
-            text=[f'<b>{location_name}<br>{total_extension} years</b>'],
+            text=[f'<b>{total_extension}<br>years</b>'],
             textfont=dict(
-                color='rgba(250, 46, 35, 1)',
-                size=11,
+                color='rgb(250, 46, 35)',
+                size=15,
             ),
             textposition='top center',
             hoverinfo='skip',
@@ -541,42 +541,80 @@ def life_expectancy_extension_by_country_plotter(
 
 
 def life_expectancy_extension_by_risk_plotter(
-    risk_impact_filtered: pd.DataFrame,
+    risk_impact_filtered_dietary_groupped: pd.DataFrame,
     rei_color_map: dict,
-    sex_name: str,
-    sex_name_to_id: dict,
+    age: int,
 ) -> go.Figure:
-    sex_id = sex_name_to_id[sex_name]
-    fig = px.treemap(
-        risk_impact_filtered.query('sex_id == @sex_id'),
-        path=[px.Constant("All selected risks"), 'rei_parent_name', 'rei_name'],
-        values='E_x_diff',
-        color='rei_name',
-        color_discrete_map=rei_color_map,
-        template='plotly_white',
+
+    data_to_plot = (
+        risk_impact_filtered_dietary_groupped
+        .query('age == @age')
+        [
+            [
+                'E_x_diff',
+                'rei_name',
+        ]
+        ]
+        .sort_values(by='E_x_diff', ascending=False)
+        .round(2)
     )
 
-    fig.update_traces(
-        root_color="lightgrey",
-        hovertemplate='Excluding <b>%{label}</b>,<br> give esitmated life extension:<br> <b>%{value}</b> years'
+    # Sample data for the pie chart
+    total_sum = round(data_to_plot['E_x_diff'].sum(), 1)
+
+    outer_labels = data_to_plot['rei_name']
+    outer_values = data_to_plot['E_x_diff']
+    outer_colors = [rei_color_map[x] for x in data_to_plot['rei_name']]
+
+    # Create the pie chart trace
+    outer_pie = go.Pie(
+        labels=outer_labels,
+        values=outer_values,
+        textinfo='value',
+        textfont=dict(size=15),
+        hole=0.65,  # Set the size of the hole inside the pie chart (0.6 means 60% of the radius)
+        marker=dict(colors=outer_colors),  # Set colors for each sector
+        sort=False
     )
-    fig.update_layout(margin = dict(t=0, l=0, r=0, b=0))
 
-    fig.data[0].textinfo = "label+value+percent root"
+    # Calculate the center position for the text annotation
+    center_x = 0.5
+    center_y = 0.55
 
-    labels = fig.data[0]['labels']
-    colors = [
-        rei_color_map[x]
-        if x in rei_color_map.keys() else 'lightgray'
-        for x in labels
-    ]
 
-    fig.data[0]['marker']['colors'] = np.array(colors)
+    fig = go.Figure(data=[outer_pie])
+
+    # Set layout properties for the figure
+    fig.update_layout(
+        annotations=[
+            dict(
+                x=center_x,
+                y=center_y,
+                showarrow=False,
+                text=f'<b>+{total_sum}</b>',  # Text to display in the center
+                font=dict(size=35, color='black',),
+            ),
+            dict(
+                x=center_x,
+                y=center_y - 0.1,
+                showarrow=False,
+                text=f'<b>years</b>',  # Text to display in the center
+                font=dict(size=20, color='black',),
+            )
+
+        ],
+    )
 
     fig.update_layout(
-        height=250,
+        template='plotly_white',
+        height=300,
+        margin = dict(t=0, l=0, r=0, b=0),
+        legend=dict(
+            title="Excluded risk factors",
+        ),
     )
 
+    # Show the figure
     return fig
 
 
@@ -589,19 +627,19 @@ def life_expectancy_extension_by_sex_plotter(
 
     x_data = {
         sex_name: {
-            'Default life expectancy': report.loc[sex_name].loc['val', 'Default life expectancy'],
-            'Estimated life extension': report.loc[sex_name].loc['val', 'Estimated life extension']
+            'Default life expectancy': report.loc[sex_name, 'Default life expectancy'],
+            'Estimated life extension': report.loc[sex_name, 'Estimated life extension']
         }    for sex_name in ['Male', 'Female']
     }
 
     maximum_le = max(
         [
-            report.loc[sex_name].loc['val', 'Extended life expectancy']
+            report.loc[sex_name, 'Extended life expectancy']
             for sex_name in ['Male', 'Female']
         ]
     )
     
-    report = round(report.copy(), 1)
+    #report = round(report.copy(), 1)
 
     fig = go.Figure()
 
@@ -609,9 +647,9 @@ def life_expectancy_extension_by_sex_plotter(
 
         percent_extension = round(
             100 * (
-                report.loc[sex_name].loc['val', 'Estimated life extension']
+                report.loc[sex_name, 'Estimated life extension']
                 /
-                report.loc[sex_name].loc['val', 'Default life expectancy']
+                report.loc[sex_name, 'Default life expectancy']
             ),
             1
         )
@@ -628,10 +666,10 @@ def life_expectancy_extension_by_sex_plotter(
                     line=dict(width=1)
                 ),
                 text=(
-                    f"{report.loc[sex_name].loc['val', 'Default life expectancy']}"
+                    f"{report.loc[sex_name, 'Default life expectancy']}"
                     f"<br>({percent_default} %)"
                 ),
-                textfont=dict(color='white'),
+                textfont=dict(color='white', size=13),
                 insidetextanchor='end',
                 hovertemplate='Default life expectancy<br> is: %{y} years',
                 name=f'{sex_name} default life expectancy',
@@ -651,10 +689,10 @@ def life_expectancy_extension_by_sex_plotter(
                     line=dict(width=1)
                 ),
                 text=(
-                    f"{report.loc[sex_name].loc['val', 'Estimated life extension']}"
+                    f"{report.loc[sex_name, 'Estimated life extension']}"
                     f"<br>({percent_extension} %)"
                 ),
-                textfont=dict(color='white'),
+                textfont=dict(color='white', size=13),
                 textposition = "inside",
                 insidetextanchor='middle',
                 hovertemplate='Extension of life expectancy<br> is: %{y} years',
@@ -841,7 +879,7 @@ app.layout = dbc.Container(
                 ),
                 dbc.Col(
                     [
-                        dbc.Label("Country"),
+                        dbc.Label("Country", style={"margin-bottom": "0px", "font-size": "12px", "color": "gray"}),
                         dcc.Dropdown(
                             id="location_name",
                             options=list(location_name_to_id.keys()),
@@ -858,7 +896,7 @@ app.layout = dbc.Container(
                 ),
                 dbc.Col(
                     [
-                        dbc.Label("Sex"),
+                        dbc.Label("Sex", style={"margin-bottom": "0px", "font-size": "12px", "color": "gray"}),
                         dcc.Dropdown(
                             id="sex_name",
                             options=['Male', 'Female'],
@@ -873,7 +911,7 @@ app.layout = dbc.Container(
                 ),
                 dbc.Col(
                     [
-                        dbc.Label("Age y.o."),
+                        dbc.Label("Age y.o.", style={"margin-bottom": "0px", "font-size": "12px", "color": "gray"}),
                         dcc.Dropdown(
                             id="age",
                             options=list(range(0, 110, 1)),
@@ -888,17 +926,23 @@ app.layout = dbc.Container(
                 ),
                 dbc.Col(
                     [
-                        dbc.Label(
-                            "Check risk factors for exclude",
-                            style={"margin-left": "20px"},
-                        ),
-                        dcc.Checklist(
-                            id="risks_names_manageable",
-                            options=risks_names_manageable,
-                            value=risks_names_manageable,
-                            inline=True,
-                            inputStyle={"margin-left": "5px"},
-                        ),
+                        html.Details([
+                            html.Summary(
+                                'Check risk factors for exclude',
+                                style={"margin-bottom": "0px", "margin-left": "10px",}
+                            ),
+                            # dbc.Label(
+                            #     "Check risk factors for exclude",
+                            #     style={"margin-left": "20px"},
+                            # ),
+                            dcc.Checklist(
+                                id="risks_names_manageable",
+                                options=risks_names_manageable,
+                                inline=True,
+                                value=risks_names_manageable,
+                                inputStyle={"margin-left": "5px"},
+                            ),
+                        ])
                     ],
                     xs=12, sm=12, md=5, lg=5, xl=5,
                     style={
@@ -918,7 +962,6 @@ app.layout = dbc.Container(
                         html.Br(),
                         html.Br(),
                         html.Br(),
-                        html.Br(),
                     ],
                     xs=12, sm=12, md=4, lg=4, xl=4,
                 ),
@@ -928,13 +971,11 @@ app.layout = dbc.Container(
                         html.Br(),
                         html.Br(),
                         html.Br(),
-                        html.Br(),
                     ],
                     xs=12, sm=12, md=4, lg=4, xl=4,
                 ),
                 dbc.Col(
                     [
-                        html.Br(),
                         html.Br(),
                     ],
                     xs=12, sm=12, md=4, lg=4, xl=4,
@@ -1110,6 +1151,26 @@ app.layout = dbc.Container(
         dbc.Row(
             [
                 dbc.Col(
+                    [                           
+                        html.Br(),
+                        dcc.Markdown(
+                            id='life_expectancy_extension_by_risk_suptitle',
+                        ),
+                        html.Br(),
+                        dcc.Graph(
+                            id="life_expectancy_extension_by_risk",
+                            config={
+                                 'displaylogo': False,
+                                 'displayModeBar': False,
+                            #     'editSelection': False,
+                            #     'editable': False,
+                            },
+                            # animate=True,
+                        ),
+                    ],
+                    xs=12, sm=12, md=5, lg=5, xl=5,
+                ),
+                dbc.Col(
                     [
                         html.Br(),
                         dcc.Markdown(
@@ -1122,31 +1183,12 @@ app.layout = dbc.Container(
                                 'displayModeBar': False,
                                 'editSelection': False,
                                 'editable': False,
+                                'scrollZoom': False
                             },
                         )
                     ],
                     xs=12, sm=12, md=7, lg=7, xl=7,
                 ),
-                dbc.Col(
-                    [                           
-                        html.Br(),
-                        dcc.Markdown(
-                            id='life_expectancy_extension_by_risk_suptitle',
-                        ),
-                        html.Br(),
-                        dcc.Graph(
-                            id="life_expectancy_extension_by_risk",
-                            config={
-                                'displaylogo': False,
-                                'displayModeBar': False,
-                                'editSelection': False,
-                                'editable': False,
-                            },
-                            animate=True,
-                        ),
-                    ],
-                    xs=12, sm=12, md=5, lg=5, xl=5,
-                )
             ]
         ),
         html.Br(),
@@ -1322,21 +1364,21 @@ def update_life_expectancy_extension_by_country(
 
 @app.callback(  
     Output(component_id='life_expectancy_extension_by_risk', component_property='figure'),
-    Input(component_id='sex_name', component_property='value'),
+    Input(component_id='age', component_property='value'),
     Input(component_id='preprocessed_data', component_property='data'),
 )
-def update_life_expectancy_extension_by_risk(sex_name, preprocessed_data):
+def update_life_expectancy_extension_by_risk(age, preprocessed_data):
     preprocessed_data = json.loads(preprocessed_data)
-    risk_impact_filtered_cur_age = pd.read_json(
-        preprocessed_data['risk_impact_filtered_cur_age'],
+    
+    risk_impact_filtered_dietary_groupped = pd.read_json(
+        preprocessed_data['risk_impact_filtered_dietary_groupped'],
         orient='split'
     )
 
     life_expectancy_extension_by_risk = life_expectancy_extension_by_risk_plotter(
-        risk_impact_filtered=risk_impact_filtered_cur_age,
+        risk_impact_filtered_dietary_groupped=risk_impact_filtered_dietary_groupped,
         rei_color_map=rei_color_map,
-        sex_name=sex_name,
-        sex_name_to_id=sex_name_to_id,
+        age=age
     )
 
     return life_expectancy_extension_by_risk
@@ -1355,7 +1397,12 @@ def update_life_expectancy_extension_by_sex(
     report = pd.read_json(
         preprocessed_data['report'],
         orient='split'
-    ).set_index(['sex_name', 'index'])
+    )
+    report = (
+        report
+        .drop('index', axis=1)
+        .set_index('sex_name')
+    )
 
     life_expectancy_extension_by_sex = life_expectancy_extension_by_sex_plotter(
         report,
@@ -1390,4 +1437,4 @@ def update_life_expectancy_extension_by_age(
     return life_expectancy_extension_by_age
 
 if __name__ == '__main__':
-    app.run_server(debug=True, use_reloader=False)
+    app.run_server(debug=True, use_reloader=False, host='0.0.0.0', port=8080)

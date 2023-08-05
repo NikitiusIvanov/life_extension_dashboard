@@ -3,7 +3,10 @@
 
 # Data
 data/
-.csv
+.
+
+# Test modules
+test_features.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
